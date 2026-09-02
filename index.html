@@ -3,56 +3,70 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>THE ARCHIVE — Escape Room</title>
-    <meta name="description" content="An escape room where every hidden object is a story. Find the informative blocks, solve the room." />
+    <title>THE ARCHIVE — Simulation</title>
+    <meta name="description" content="A website as a living simulation — walk, drive, pick hidden informative blocks." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
   </head>
   <body>
     <div id="app">
       <canvas id="gameCanvas"></canvas>
 
-      <!-- Top HUD -->
+      <!-- HUD -->
       <div id="hud" class="absolute inset-0 pointer-events-none flex flex-col">
-        <!-- header -->
-        <header class="pointer-events-auto flex items-center justify-between px-4 md:px-6 py-4 border-b border-white/10 glass">
+        <header class="pointer-events-auto flex items-center justify-between px-3 md:px-6 py-3 border-b border-white/10 glass">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center font-black text-black text-sm">◉</div>
             <div>
-              <div class="text-[11px] tracking-[0.22em] text-white/50 font-mono">ESCAPE ROOM — 01</div>
+              <div class="text-[10px] tracking-[0.22em] text-white/50 font-mono">SIMULATION — 01</div>
               <div class="font-display font-bold tracking-tight -mt-1">THE ARCHIVE</div>
             </div>
+            <span class="hidden lg:inline-flex ml-2 px-2 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-mono text-white/60">WASD MOVE · SHIFT SPRINT · SPACE JUMP · E PICK/DRIVE · C CAMERA</span>
           </div>
-          <div class="flex items-center gap-2 md:gap-3">
-            <div class="hidden md:flex items-center gap-2 text-xs font-mono text-white/60">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> LIVE
-            </div>
-            <button id="hintBtn" class="pointer-events-auto px-3 py-2 rounded-full bg-white text-black text-xs font-bold tracking-wide hover:bg-white/90 transition">HINT — <span id="hintCount">3</span></button>
-            <button id="resetBtn" class="pointer-events-auto w-9 h-9 rounded-full border border-white/15 text-white/70 hover:text-white hover:border-white/30 flex items-center justify-center">↺</button>
+          <div class="flex items-center gap-2">
+            <span id="camLabel" class="hidden md:inline-flex px-3 py-1 rounded-full bg-amber-500 text-black text-[11px] font-bold tracking-wide">THIRD PERSON</span>
+            <button id="camBtn" class="pointer-events-auto px-3 py-2 rounded-full bg-white text-black text-xs font-bold hover:bg-white/90">CAM [C]</button>
+            <button id="hintBtn" class="pointer-events-auto px-3 py-2 rounded-full bg-white/10 border border-white/20 text-white text-xs font-bold">HINT <span id="hintCount">3</span></button>
+            <button id="resetBtn" class="pointer-events-auto w-9 h-9 rounded-full border border-white/15 text-white/70 hover:text-white flex items-center justify-center">↺</button>
           </div>
         </header>
 
-        <!-- center hint / status -->
         <div class="flex-1 relative">
-          <div id="centerPrompt" class="absolute left-1/2 -translate-x-1/2 top-6 md:top-8 glass rounded-full px-4 py-2 flex items-center gap-2 text-xs font-mono text-white/80">
+          <div id="centerPrompt" class="absolute left-1/2 -translate-x-1/2 top-4 md:top-6 glass rounded-full px-4 py-2 flex items-center gap-2 text-xs font-mono text-white/80 text-center">
             <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-            <span id="promptText">Click & drag to look around — click glowing objects to inspect</span>
+            <span id="promptText">WASD to move · Click to lock mouse · E near object to pick · Find the car & bike outside</span>
           </div>
 
-          <!-- crosshair -->
-          <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 pointer-events-none opacity-60">
+          <div id="interactPrompt" class="hidden absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-10 bg-black text-white text-xs font-mono px-4 py-2 rounded-full border border-white/15 flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-amber-500 text-black font-bold">E</span>
+            <span id="interactText">Pick up</span>
+          </div>
+
+          <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 pointer-events-none opacity-50">
             <div class="absolute left-1/2 top-0 w-px h-2 bg-white/70 -translate-x-1/2"></div>
             <div class="absolute left-1/2 bottom-0 w-px h-2 bg-white/70 -translate-x-1/2"></div>
             <div class="absolute top-1/2 left-0 w-2 h-px bg-white/70 -translate-y-1/2"></div>
             <div class="absolute top-1/2 right-0 w-2 h-px bg-white/70 -translate-y-1/2"></div>
           </div>
 
-          <!-- hover label -->
-          <div id="hoverLabel" class="hidden absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-8 bg-black text-white text-xs font-mono px-3 py-1.5 rounded-full border border-white/15">Inspect</div>
+          <!-- Controls bar bottom center -->
+          <div class="hidden lg:flex absolute left-1/2 -translate-x-1/2 bottom-6 gap-2 pointer-events-auto">
+            <div class="glass rounded-full px-3 py-2 flex items-center gap-2 text-xs font-mono text-white/70">
+              <span class="w-6 h-6 rounded bg-white text-black flex items-center justify-center font-bold text-[10px]">W</span>
+              <span class="w-6 h-6 rounded bg-white/15 flex items-center justify-center">A</span>
+              <span class="w-6 h-6 rounded bg-white/15 flex items-center justify-center">S</span>
+              <span class="w-6 h-6 rounded bg-white/15 flex items-center justify-center">D</span>
+              <span class="mx-1 h-4 w-px bg-white/15"></span>
+              <span class="px-2 py-1 rounded bg-white/10">SHIFT</span> Sprint
+              <span class="px-2 py-1 rounded bg-white/10">SPACE</span> Jump
+            </div>
+            <div class="glass rounded-full px-3 py-2 flex items-center gap-2 text-xs font-mono text-white/70">
+              <span class="px-2 py-1 rounded bg-amber-500 text-black font-bold">E</span> Pick / Drive
+              <span class="px-2 py-1 rounded bg-white/10">C</span> Camera
+            </div>
+          </div>
         </div>
 
-        <!-- bottom HUD -->
         <div class="pointer-events-auto p-3 md:p-4 flex flex-col md:flex-row gap-3 md:items-end md:justify-between">
-          <!-- inventory -->
           <div class="glass rounded-2xl p-3 md:p-4 min-w-[280px] md:min-w-[360px]">
             <div class="flex items-center justify-between mb-3">
               <div class="text-[11px] tracking-[0.18em] text-white/50 font-mono">INVENTORY — <span id="foundCount">0</span>/6 FOUND</div>
@@ -61,12 +75,9 @@
             <div class="w-full h-1 bg-white/10 rounded-full overflow-hidden mb-3">
               <div id="progressBar" class="h-full bg-amber-500 transition-all duration-500" style="width:0%"></div>
             </div>
-            <div id="inventory" class="grid grid-cols-6 gap-2">
-              <!-- slots injected by JS -->
-            </div>
+            <div id="inventory" class="grid grid-cols-6 gap-2"></div>
           </div>
 
-          <!-- controls + timer -->
           <div class="flex gap-3">
             <div class="glass rounded-2xl px-4 py-3 flex items-center gap-4">
               <div class="text-center">
@@ -74,8 +85,8 @@
                 <div id="timer" class="font-mono font-bold text-lg leading-none">00:00</div>
               </div>
               <div class="w-px h-10 bg-white/10"></div>
-              <div class="text-xs leading-tight text-white/70 max-w-[160px] hidden md:block">
-                Find all <b class="text-white">informative blocks</b> to unlock the exit door.
+              <div class="text-xs leading-tight text-white/60 max-w-[160px] hidden md:block">
+                Collect all <b class="text-white">informative blocks</b> then return to the exit door.
               </div>
               <button id="exitBtn" class="hidden md:inline-flex items-center gap-2 px-5 py-3 rounded-full bg-zinc-800 text-white/40 font-bold text-xs tracking-wide cursor-not-allowed" disabled>
                 <span class="w-2 h-2 rounded-full bg-white/30"></span> EXIT LOCKED
@@ -84,6 +95,11 @@
             <button id="exitBtnMobile" class="md:hidden flex-1 glass rounded-2xl px-4 py-3 font-bold text-xs tracking-wide text-white/40" disabled>EXIT LOCKED</button>
           </div>
         </div>
+      </div>
+
+      <!-- Mobile joystick hint -->
+      <div class="lg:hidden absolute bottom-32 left-3 glass rounded-2xl p-2 pointer-events-none">
+        <div class="text-[10px] font-mono text-white/50 tracking-wide">DRAG left side to move · Right side to look</div>
       </div>
 
       <!-- Block Modal -->
@@ -98,9 +114,7 @@
             </div>
             <button id="closeModal" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/50 border border-white/15 text-white flex items-center justify-center hover:bg-white hover:text-black transition">✕</button>
           </div>
-          <div id="modalBody" class="overflow-auto p-6 md:p-8 space-y-6 text-sm leading-relaxed text-white/80">
-            <!-- injected -->
-          </div>
+          <div id="modalBody" class="overflow-auto p-6 md:p-8 space-y-6 text-sm leading-relaxed text-white/80"></div>
           <div class="p-4 md:p-6 border-t border-white/10 flex items-center justify-between gap-3">
             <div class="text-xs font-mono text-white/50">Found <span id="modalFound">1</span>/6 — <span id="modalHint">Keep exploring</span></div>
             <button id="modalNext" class="px-6 py-3 rounded-full bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition">Continue →</button>
@@ -108,61 +122,44 @@
         </div>
       </div>
 
-      <!-- Win Screen -->
+      <!-- Win -->
       <div id="winScreen" class="hidden absolute inset-0 z-30 bg-[#070709] flex flex-col items-center justify-center p-6 text-center">
         <div class="w-full max-w-[640px]">
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-mono tracking-wide mb-6">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> ESCAPE SUCCESSFUL
           </div>
           <h1 class="font-display text-5xl md:text-6xl font-black tracking-tighter leading-none">YOU<br/>ESCAPED<span class="text-amber-500">.</span></h1>
-          <p class="mt-4 text-white/60 max-w-[520px] mx-auto leading-relaxed">You discovered every informative block hidden in The Archive. The website was the game all along — each object was a page.</p>
+          <p class="mt-4 text-white/60 max-w-[520px] mx-auto leading-relaxed">You roamed the simulation, drove the city, and uncovered every informative block. The website was the world.</p>
           <div class="mt-8 grid grid-cols-3 gap-3 text-left">
-            <div class="glass rounded-2xl p-4">
-              <div class="text-[11px] tracking-[0.15em] text-white/40 font-mono">TIME</div>
-              <div id="winTime" class="font-mono font-bold text-xl">00:00</div>
-            </div>
-            <div class="glass rounded-2xl p-4">
-              <div class="text-[11px] tracking-[0.15em] text-white/40 font-mono">BLOCKS</div>
-              <div class="font-bold text-xl">6/6</div>
-            </div>
-            <div class="glass rounded-2xl p-4">
-              <div class="text-[11px] tracking-[0.15em] text-white/40 font-mono">HINTS USED</div>
-              <div id="winHints" class="font-bold text-xl">0</div>
-            </div>
+            <div class="glass rounded-2xl p-4"><div class="text-[11px] tracking-[0.15em] text-white/40 font-mono">TIME</div><div id="winTime" class="font-mono font-bold text-xl">00:00</div></div>
+            <div class="glass rounded-2xl p-4"><div class="text-[11px] tracking-[0.15em] text-white/40 font-mono">BLOCKS</div><div class="font-bold text-xl">6/6</div></div>
+            <div class="glass rounded-2xl p-4"><div class="text-[11px] tracking-[0.15em] text-white/40 font-mono">HINTS USED</div><div id="winHints" class="font-bold text-xl">0</div></div>
           </div>
           <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <button id="playAgain" class="px-8 py-4 rounded-full bg-amber-500 text-black font-bold hover:bg-amber-400 transition">Play Again</button>
-            <button id="viewSite" class="px-8 py-4 rounded-full border border-white/15 text-white font-bold hover:bg-white hover:text-black transition">View All Blocks</button>
+            <button id="viewSite" class="px-8 py-4 rounded-full border border-white/15 text-white font-bold hover:bg-white hover:text-black transition">Roam Again</button>
           </div>
           <div class="mt-6 text-xs font-mono text-white/30">Built with BabylonJS • Blueblood Studio</div>
         </div>
       </div>
 
-      <!-- Intro overlay -->
+      <!-- Intro -->
       <div id="intro" class="absolute inset-0 z-10 bg-[#060608] flex items-center justify-center p-6">
-        <div class="w-full max-w-[560px] text-center">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 text-xs font-mono text-white/60 mb-6">BABYLONJS • ESCAPE ROOM • INFORMATIVE BLOCKS</div>
+        <div class="w-full max-w-[600px] text-center">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 text-xs font-mono text-white/60 mb-6">BABYLONJS • SIMULATION • 6 HIDDEN BLOCKS</div>
           <h1 class="font-display text-4xl md:text-5xl font-black tracking-tighter leading-none">THE<br/>ARCHIVE<span class="text-amber-500">.</span></h1>
-          <p class="mt-4 text-white/60 leading-relaxed">This is not a normal website. It's a room. Six <b class="text-white">informative blocks</b> are hidden as objects. Find them, solve the puzzles, escape.</p>
+          <p class="mt-4 text-white/60 leading-relaxed">Not a room. A <b class="text-white">world</b>. Walk, sprint, jump. Drive a car or bike. Find 6 informative blocks hidden as objects. Change cameras. Escape.</p>
           <div class="mt-6 grid grid-cols-3 gap-2 text-left">
-            <div class="glass rounded-xl p-3">
-              <div class="text-lg">🗝️</div>
-              <div class="text-xs font-bold mt-1">Explore</div>
-              <div class="text-xs text-white/50 leading-tight">Drag to look, click glowing objects</div>
-            </div>
-            <div class="glass rounded-xl p-3">
-              <div class="text-lg">🧩</div>
-              <div class="text-xs font-bold mt-1">Decode</div>
-              <div class="text-xs text-white/50 leading-tight">Some blocks need codes</div>
-            </div>
-            <div class="glass rounded-xl p-3">
-              <div class="text-lg">🚪</div>
-              <div class="text-xs font-bold mt-1">Escape</div>
-              <div class="text-xs text-white/50 leading-tight">All 6 unlock the exit</div>
-            </div>
+            <div class="glass rounded-xl p-3"><div class="text-lg">🏃</div><div class="text-xs font-bold mt-1">Roam Freely</div><div class="text-xs text-white/50">WASD · Shift sprint · Space jump</div></div>
+            <div class="glass rounded-xl p-3"><div class="text-lg">🏎️</div><div class="text-xs font-bold mt-1">Drive</div><div class="text-xs text-white/50">Find car & bike · E to enter</div></div>
+            <div class="glass rounded-xl p-3"><div class="text-lg">📷</div><div class="text-xs font-bold mt-1">Cameras</div><div class="text-xs text-white/50">C to cycle · 4 modes</div></div>
           </div>
-          <button id="startBtn" class="mt-8 w-full py-4 rounded-full bg-amber-500 text-black font-black tracking-wide hover:bg-amber-400 transition text-sm">ENTER THE ROOM →</button>
-          <div class="mt-3 text-xs font-mono text-white/30">Tip: use hints if you're stuck — 3 available</div>
+          <div class="mt-4 glass rounded-xl p-3 text-left">
+            <div class="text-xs font-mono tracking-wide text-amber-400">HOW TO PLAY</div>
+            <div class="mt-1 text-xs text-white/60 leading-relaxed">Click to lock mouse (drag to look). Walk into the Archive building at center. Get within 2m of glowing object → <b class="text-white">E to pick</b>. Codes: Clock 2025, Safe 0420.</div>
+          </div>
+          <button id="startBtn" class="mt-6 w-full py-4 rounded-full bg-amber-500 text-black font-black tracking-wide hover:bg-amber-400 transition text-sm">ENTER SIMULATION →</button>
+          <div class="mt-3 text-xs font-mono text-white/30">Best on desktop · Mobile: use on-screen drag zones</div>
         </div>
       </div>
 
