@@ -1,11 +1,12 @@
 import "./style.css";
-import { Engine, Vector3 } from "@babylonjs/core";
+import { Engine, Vector3, SceneLoader } from "@babylonjs/core";
+import "@babylonjs/loaders/glTF";
 import { createScene, type Interactable, type Vehicle } from "./game/scene";
 import { BLOCKS } from "./data/blocks";
 
 const canvas = document.getElementById("gameCanvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
-const { scene, camera, charRoot, interactables, door, vehicles } = createScene(engine, canvas);
+const { scene, camera, charRoot, interactables, door, vehicles, shadowGen } = createScene(engine, canvas) as any;
 
 // State
 let found = new Set<string>();
@@ -50,6 +51,7 @@ const viewSiteBtn = document.getElementById("viewSite")!;
 const camLabel = document.getElementById("camLabel")!;
 const camBtn = document.getElementById("camBtn")!;
 const invertBtn = document.getElementById("invertBtn") as HTMLButtonElement | null;
+const invertYBtn = document.getElementById("invertYBtn") as HTMLButtonElement | null;
 const interactPrompt = document.getElementById("interactPrompt")!;
 const interactText = document.getElementById("interactText")!;
 
@@ -65,13 +67,13 @@ function updateCamLabel() {
   if (hoverLabel) hoverLabel.textContent = `Camera: ${camNames[camMode]}`;
 }
 
-// Input — fixed inverted mouse + vertical
+// Input — TRUE FPS: mouse right = look right, up = look up
 const keys = new Map<string, boolean>();
 let mouseX = 0;
 let mouseY = 0;
-let pitch = 0; // vertical look
-let invertX = true; // FIX: was inverted, now corrected
-let invertY = false;
+let pitch = 0; // vertical look, positive = look up
+let invertX = false; // false = normal (right→right)
+let invertY = false; // false = normal (up→up) — WAS inverted before, now fixed
 let isPointerLocked = false;
 
 // Character physics
@@ -85,6 +87,64 @@ let vehicleSpeed = 0;
 
 // apply initial yaw
 charRoot.rotation.y = charYaw;
+
+// ── Load real supercar/bike models (Porsche-level) with fallback ──
+async function attachModel(root: any, url: string, file: string, scale = 1, yOffset = 0, yawFix = 0) {
+  try {
+    const res = await SceneLoader.ImportMeshAsync("", url, file, scene);
+    const rootMesh = res.meshes[0] as any;
+    // hide placeholders (carBody, etc) near this root if any — find by parent
+    // compute bounds to normalize scale
+    let min = new Vector3(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE);
+    let max = new Vector3(-Number.MAX_VALUE, -Number.MAX_VALUE, -Number.MAX_VALUE);
+    res.meshes.forEach((m: any) => {
+      if (!m.getBoundingInfo) return;
+      try {
+        const b = m.getBoundingInfo();
+        const mn = b.minimum, mx = b.maximum;
+        min = Vector3.Minimize(min, mn);
+        max = Vector3.Maximize(max, mx);
+      } catch {}
+    });
+    const size = max.subtract(min);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const target = root.id === "carRoot" ? 2.55 : 1.9;
+    const autoScale = maxDim > 0.01 ? target / maxDim : scale;
+    rootMesh.parent = root;
+    rootMesh.position = new Vector3(0, yOffset, 0);
+    rootMesh.rotation.y = yawFix;
+    rootMesh.scaling.setAll(autoScale * scale);
+    // enable shadows + env
+    res.meshes.forEach((m: any) => {
+      if (m.material) {
+        try { m.receiveShadows = true; } catch {}
+      }
+      try { shadowGen?.addShadowCaster?.(m, true); } catch {}
+    });
+    // hide primitive placeholders under same root
+    root.getChildMeshes?.().forEach((c: any) => {
+      if (c.name.startsWith("carBody") || c.name.startsWith("carCabin") || c.name.startsWith("bikeFrame") || c.name.includes("Wheel") || c.name.includes("carWheel") || c.name.includes("bikeWheel")) {
+        // keep wheels? hide only if real model has wheels — hide all placeholders
+        if (c !== rootMesh) c.setEnabled?.(false);
+      }
+    });
+    // also hide by name search globally for placeholders near root
+    ["carBody","carCabin","carHL","carWheel","bikeFrame","bikeSeat","bikeHandle","bikeWheel","bikeHL"].forEach(n=> {
+      scene.meshes.filter((m:any)=> m.name.startsWith(n)).forEach((m:any)=>{ if(m.parent === root || m.parent?.parent === root) m.setEnabled(false); });
+    });
+    // fallback simple
+    showToast(`${root.id === "carRoot" ? "Supercar" : "Sport bike"} loaded — GTA tier!`);
+    return true;
+  } catch (e) {
+    console.warn("Model load failed", url+file, e);
+    return false;
+  }
+}
+// Load — do not block game
+attachModel(vehicles.find(v=>v.id==="car")!.root, "https://threejs.org/examples/models/gltf/", "ferrari.glb", 1.0, 0.18, Math.PI);
+attachModel(vehicles.find(v=>v.id==="bike")!.root, "https://cdn.jsdelivr.net/npm/@baidumap/mapv-three@1.7.1/dist/assets/models/twin/REALISTIC/", "MOTORCYCLE.glb", 0.95, 0.12, 0);
+
+// Fallback: if bike CDN fails, keep our GTA procedural bike (already high-detail) — it stays visible
 
 function renderInventory() {
   inventoryEl.innerHTML = "";
@@ -329,15 +389,15 @@ function updateCamera() {
     const fwd = new Vector3(Math.sin(yaw) * Math.cos(clampedPitch), Math.sin(clampedPitch), Math.cos(yaw) * Math.cos(clampedPitch));
     camera.target.copyFrom(eye.add(fwd.scale(5)));
     camera.position.copyFrom(eye);
-    camera.beta = 1.35 - clampedPitch * 0.75;
+    camera.beta = 1.35 + clampedPitch * 0.65;
     camera.alpha = yaw - Math.PI / 2;
     camera.radius = 0.7;
     return;
   }
-  // third person — GTA chase cam
+  // third person — GTA chase cam (pitch up = look up = beta increases away from top)
   camera.setTarget(targetPos.add(new Vector3(0, 1.05, 0)));
   camera.radius = inVehicle ? 9.2 : 7.2;
-  camera.beta = (inVehicle ? 1.06 : 1.14) - clampedPitch * 0.42;
+  camera.beta = (inVehicle ? 1.06 : 1.14) + clampedPitch * 0.48;
   camera.alpha = yaw - Math.PI / 2 + mouseX * 0.0042;
 }
 
@@ -391,32 +451,19 @@ scene.onBeforeRenderObservable.add(() => {
       vehicleSpeed *= -0.4;
     }
   } else {
-    // on-foot
+    // on-foot — TRUE FPS: WASD = character strafe (not camera), mouse = look
     const w = keys.get("w") || keys.get("arrowup");
     const s = keys.get("s") || keys.get("arrowdown");
     const a = keys.get("a") || keys.get("arrowleft");
     const d = keys.get("d") || keys.get("arrowright");
-
-    // rotation via A/D as turning if orbit? else strafe + turn
-    // For intuitive: A/D strafe, Q/E turn — but simpler: A/D = rotate, W/S = forward/back
-    // We'll do: if not pointer locked, A = turn left, D = turn right, A+D+W for strafe?
-    // Better: A/D rotates slowly, and also we rotate via mouse.
-    const rotateSpeed = 0.04 * dt;
-    if (keys.get("a")) charYaw -= rotateSpeed * (keys.get("shift") ? 1.5 : 1);
-    if (keys.get("d")) charYaw += rotateSpeed * (keys.get("shift") ? 1.5 : 1);
-    // allow Q/E as strafe
-    const q = keys.get("q");
-    const e = keys.get("e") && !keys.get("_eHandled"); // e is interact, don't strafe when prompting? but we handle interact on keydown, not hold
-    // compute forward/right
     const forward = new Vector3(Math.sin(charYaw), 0, Math.cos(charYaw));
     const right = new Vector3(Math.sin(charYaw + Math.PI / 2), 0, Math.cos(charYaw + Math.PI / 2));
     let move = new Vector3(0, 0, 0);
     let moving = false;
     if (w) { move.addInPlace(forward); moving = true; }
     if (s) { move.addInPlace(forward.scale(-1)); moving = true; }
-    if (q) { move.addInPlace(right.scale(-1)); moving = true; }
-    // D already used for rotate, so we won't strafe with D — keep rotate only. If user holds both, they turn.
-    // For mouse, small drift already in camera.
+    if (a) { move.addInPlace(right.scale(-1)); moving = true; }
+    if (d) { move.addInPlace(right); moving = true; }
 
     if (moving) {
       move.normalize();
@@ -522,16 +569,28 @@ scene.onPointerDown = () => {
 
 // Keys
 function updateInvertLabel() {
-  if (!invertBtn) return;
-  invertBtn.textContent = `INV: ${invertX ? "ON" : "OFF"}`;
-  invertBtn.classList.toggle("bg-amber-500", invertX);
-  invertBtn.classList.toggle("text-black", invertX);
-  invertBtn.classList.toggle("border-amber-500", invertX);
+  if (invertBtn) {
+    invertBtn.textContent = `INV X: ${invertX ? "ON" : "OFF"}`;
+    invertBtn.classList.toggle("bg-amber-500", invertX);
+    invertBtn.classList.toggle("text-black", invertX);
+    invertBtn.classList.toggle("border-amber-500", invertX);
+  }
+  if (invertYBtn) {
+    invertYBtn.textContent = `INV Y: ${invertY ? "ON" : "OFF"}`;
+    invertYBtn.classList.toggle("bg-amber-500", invertY);
+    invertYBtn.classList.toggle("text-black", invertY);
+    invertYBtn.classList.toggle("border-amber-500", invertY);
+  }
 }
 invertBtn?.addEventListener("click", () => {
   invertX = !invertX;
   updateInvertLabel();
-  showToast(`Mouse invert: ${invertX ? "ON (fixed)" : "OFF"}`);
+  showToast(`Invert X: ${invertX ? "ON" : "OFF"}`);
+});
+invertYBtn?.addEventListener("click", () => {
+  invertY = !invertY;
+  updateInvertLabel();
+  showToast(`Invert Y: ${invertY ? "ON" : "OFF"}`);
 });
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
@@ -548,7 +607,12 @@ window.addEventListener("keydown", (e) => {
   if (k === "i") {
     invertX = !invertX;
     updateInvertLabel();
-    showToast(`Mouse invert: ${invertX ? "ON" : "OFF"}`);
+    showToast(`Invert X: ${invertX ? "ON" : "OFF"}`);
+  }
+  if (k === "y") {
+    invertY = !invertY;
+    updateInvertLabel();
+    showToast(`Invert Y: ${invertY ? "ON" : "OFF"}`);
   }
   if (k === "c") {
     const order: CamMode[] = ["third", "first", "top", "orbit"];
