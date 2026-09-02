@@ -49,6 +49,7 @@ const playAgainBtn = document.getElementById("playAgain")!;
 const viewSiteBtn = document.getElementById("viewSite")!;
 const camLabel = document.getElementById("camLabel")!;
 const camBtn = document.getElementById("camBtn")!;
+const invertBtn = document.getElementById("invertBtn") as HTMLButtonElement | null;
 const interactPrompt = document.getElementById("interactPrompt")!;
 const interactText = document.getElementById("interactText")!;
 
@@ -64,9 +65,13 @@ function updateCamLabel() {
   if (hoverLabel) hoverLabel.textContent = `Camera: ${camNames[camMode]}`;
 }
 
-// Input
+// Input — fixed inverted mouse + vertical
 const keys = new Map<string, boolean>();
 let mouseX = 0;
+let mouseY = 0;
+let pitch = 0; // vertical look
+let invertX = true; // FIX: was inverted, now corrected
+let invertY = false;
 let isPointerLocked = false;
 
 // Character physics
@@ -300,44 +305,40 @@ function exitVehicle() {
   showToast("Exited vehicle");
 }
 
-// Camera update
+// Camera update — with pitch (vertical look) and non-inverted correction
 function updateCamera() {
   const targetPos = inVehicle ? vehicles.find(v => v.id === inVehicle)!.root.position : charRoot.position;
+  const yaw = inVehicle ? vehicleYaw : charYaw;
+  const clampedPitch = Math.max(-0.42, Math.min(0.52, pitch));
 
   if (camMode === "orbit") {
-    // free orbit — don't override alpha/beta, just keep target at character
     camera.setTarget(targetPos.add(new Vector3(0, 1, 0)));
+    // in orbit, allow full 360 via pointer lock disabled — don't override
     return;
   }
   if (camMode === "top") {
     camera.setTarget(targetPos);
     camera.radius = 18;
-    camera.beta = 0.2;
-    // alpha follows yaw
-    camera.alpha = charYaw - Math.PI / 2;
+    camera.beta = 0.22 + clampedPitch * 0.22;
+    camera.alpha = yaw - Math.PI / 2;
     return;
   }
   if (camMode === "first") {
     const p = inVehicle ? vehicles.find(v => v.id === inVehicle)!.root.position : charRoot.position;
-    const eye = p.add(new Vector3(0, inVehicle ? 0.9 : 1.55, 0));
-    const fwd = new Vector3(Math.sin(inVehicle ? vehicleYaw : charYaw), 0, Math.cos(inVehicle ? vehicleYaw : charYaw));
-    camera.setTarget(eye.add(fwd.scale(6)));
-    // position camera at eye
-    (camera as any).position?.copyFrom?.(eye);
-    // workaround: set target via alpha/beta/radius
-    camera.radius = 0.6;
-    camera.target.copyFrom(eye.add(fwd.scale(3)));
-    camera.beta = 1.25;
-    camera.alpha = (inVehicle ? vehicleYaw : charYaw) - Math.PI / 2;
+    const eye = p.add(new Vector3(0, inVehicle ? 0.92 : 1.58, 0));
+    const fwd = new Vector3(Math.sin(yaw) * Math.cos(clampedPitch), Math.sin(clampedPitch), Math.cos(yaw) * Math.cos(clampedPitch));
+    camera.target.copyFrom(eye.add(fwd.scale(5)));
+    camera.position.copyFrom(eye);
+    camera.beta = 1.35 - clampedPitch * 0.75;
+    camera.alpha = yaw - Math.PI / 2;
+    camera.radius = 0.7;
     return;
   }
-  // third person
-  camera.setTarget(targetPos.add(new Vector3(0, 1, 0)));
-  camera.radius = inVehicle ? 9 : 7.5;
-  camera.beta = inVehicle ? 1.05 : 1.12;
-  camera.alpha = (inVehicle ? vehicleYaw : charYaw) - Math.PI / 2;
-  // allow mouse to offset slightly
-  camera.alpha += mouseX * 0.003;
+  // third person — GTA chase cam
+  camera.setTarget(targetPos.add(new Vector3(0, 1.05, 0)));
+  camera.radius = inVehicle ? 9.2 : 7.2;
+  camera.beta = (inVehicle ? 1.06 : 1.14) - clampedPitch * 0.42;
+  camera.alpha = yaw - Math.PI / 2 + mouseX * 0.0042;
 }
 
 // Movement loop
@@ -520,18 +521,34 @@ scene.onPointerDown = () => {
 };
 
 // Keys
+function updateInvertLabel() {
+  if (!invertBtn) return;
+  invertBtn.textContent = `INV: ${invertX ? "ON" : "OFF"}`;
+  invertBtn.classList.toggle("bg-amber-500", invertX);
+  invertBtn.classList.toggle("text-black", invertX);
+  invertBtn.classList.toggle("border-amber-500", invertX);
+}
+invertBtn?.addEventListener("click", () => {
+  invertX = !invertX;
+  updateInvertLabel();
+  showToast(`Mouse invert: ${invertX ? "ON (fixed)" : "OFF"}`);
+});
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   keys.set(k, true);
   if (k === "shift") keys.set("shift", true);
   if (e.code === "Space") keys.set(" ", true);
   if (k === "e") {
-    // prevent repeat slide handling
     if (!keys.get("_eHandled")) {
       keys.set("_eHandled", true);
       tryInteract();
       setTimeout(() => keys.set("_eHandled", false), 250);
     }
+  }
+  if (k === "i") {
+    invertX = !invertX;
+    updateInvertLabel();
+    showToast(`Mouse invert: ${invertX ? "ON" : "OFF"}`);
   }
   if (k === "c") {
     const order: CamMode[] = ["third", "first", "top", "orbit"];
@@ -566,18 +583,23 @@ document.addEventListener("pointerlockchange", () => {
 document.addEventListener("mousemove", (e) => {
   if (!isPointerLocked || !gameStarted) return;
   if (!blockModal.classList.contains("hidden") || !winScreen.classList.contains("hidden")) return;
-  const sensitivity = 0.0025;
+  const sens = 0.0022; // tighter, less twitch
+  const dx = e.movementX * sens;
+  const dy = e.movementY * 0.0016;
+  const yawDelta = invertX ? -dx : dx;
+  const pitchDelta = invertY ? dy : -dy;
   if (inVehicle) {
-    vehicleYaw += e.movementX * sensitivity;
+    vehicleYaw += yawDelta;
   } else {
-    charYaw += e.movementX * sensitivity;
+    charYaw += yawDelta;
     charRoot.rotation.y = charYaw;
   }
-  // vertical mouse adjusts camera beta slightly via mouseX? we use beta via wheel; keep simple
-  mouseX += e.movementX * 0.1;
-  mouseX = clamp(mouseX, -60, 60);
-  // decay
-  setTimeout(() => { mouseX *= 0.92; }, 60);
+  pitch += pitchDelta;
+  pitch = clamp(pitch, -0.42, 0.52);
+  mouseX += yawDelta * 38;
+  mouseX = clamp(mouseX, -54, 54);
+  mouseY += pitchDelta * 28;
+  setTimeout(() => { mouseX *= 0.90; mouseY *= 0.90; }, 75);
 });
 
 // Touch drag for mobile
@@ -617,8 +639,9 @@ startBtn.onclick = () => {
   startTimer();
   camera.attachControl(canvas, true);
   updateCamLabel();
+  updateInvertLabel();
   renderInventory();
-  showToast("Simulation live — WASD to move, E to pick, find the car & bike!");
+  showToast("Simulation live — drag to look · WASD move · SHIFT sprint · SPACE jump · E pick/drive — Fixed inverted mouse!");
 };
 closeModalBtn.onclick = closeBlock;
 modalNextBtn.onclick = closeBlock;
