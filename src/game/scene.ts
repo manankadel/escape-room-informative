@@ -15,12 +15,8 @@ import {
   Mesh,
   type AbstractMesh,
   HighlightLayer,
-  ArcRotateCamera,
   TransformNode,
   ShadowGenerator,
-  DefaultRenderingPipeline,
-  SSAO2RenderingPipeline,
-  ColorCurves,
 } from "@babylonjs/core";
 import { BLOCKS, type Block } from "../data/blocks";
 
@@ -42,7 +38,7 @@ export type Vehicle = {
   speed: number;
 };
 
-export function createScene(engine: Engine, canvas: HTMLCanvasElement) {
+export function createScene(engine: Engine) {
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.02, 0.03, 0.06, 1);
   scene.collisionsEnabled = true;
@@ -57,18 +53,6 @@ export function createScene(engine: Engine, canvas: HTMLCanvasElement) {
   scene.imageProcessingConfiguration.toneMappingType = 1; // ACES
   scene.imageProcessingConfiguration.exposure = 1.05;
   scene.imageProcessingConfiguration.contrast = 1.1;
-
-  const camera = new ArcRotateCamera("cam", -Math.PI / 2, 1.08, 8, new Vector3(0, 1, 0), scene);
-  camera.lowerRadiusLimit = 1.8;
-  camera.upperRadiusLimit = 26;
-  camera.lowerBetaLimit = 0.18;
-  camera.upperBetaLimit = 1.5;
-  camera.wheelPrecision = 28;
-  camera.panningSensibility = 0;
-  camera.inertia = 0.82;
-  camera.angularSensibilityX = 2600;
-  camera.angularSensibilityY = 2600;
-  camera.attachControl(canvas, true);
 
   // Lights — warm sunset + cool fill (GTA golden hour)
   const hemi = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
@@ -101,52 +85,9 @@ export function createScene(engine: Engine, canvas: HTMLCanvasElement) {
   scene.fogDensity = 0.008;
   scene.fogColor = new Color3(0.12, 0.15, 0.22);
 
-  // Post — pipeline (bloom, tonemap, grain, chromatic)
-  const pipeline = new DefaultRenderingPipeline("pipe", true, scene, [camera]);
-  pipeline.samples = 4;
-  pipeline.fxaaEnabled = true;
-  pipeline.imageProcessingEnabled = true;
-  pipeline.imageProcessing.toneMappingEnabled = true;
-  pipeline.imageProcessing.toneMappingType = 1;
-  pipeline.imageProcessing.exposure = 1.02;
-  pipeline.imageProcessing.contrast = 1.08;
-  pipeline.bloomEnabled = true;
-  pipeline.bloomThreshold = 0.82;
-  pipeline.bloomWeight = 0.32;
-  pipeline.bloomKernel = 64;
-  pipeline.bloomScale = 0.55;
-  pipeline.chromaticAberrationEnabled = false;
-  pipeline.grainEnabled = true;
-  pipeline.grain.intensity = 6;
-  pipeline.grain.animated = true;
-  pipeline.sharpenEnabled = true;
-  pipeline.sharpen.edgeAmount = 0.18;
-  pipeline.sharpen.colorAmount = 0.9;
-  pipeline.imageProcessing.vignetteEnabled = true;
-  pipeline.imageProcessing.vignetteWeight = 1.4;
-  pipeline.imageProcessing.vignetteStretch = 0.35;
-  pipeline.imageProcessing.vignetteColor = new Color4(0, 0, 0, 0.55);
-  pipeline.imageProcessing.vignetteCameraFov = Math.PI / 3.2;
-
-  // Curves for filmic
-  const curves = new ColorCurves();
-  curves.globalHue = 8;
-  curves.globalSaturation = 12;
-  curves.globalDensity = 4;
-  pipeline.imageProcessing.colorCurvesEnabled = true;
-  pipeline.imageProcessing.colorCurves = curves;
-
-  // SSAO
-  try {
-    const ssao = new SSAO2RenderingPipeline("ssao", scene, 1.0, [camera]);
-    ssao.totalStrength = 0.95;
-    ssao.radius = 1.8;
-    ssao.base = 0.55;
-    ssao.maxZ = 50;
-    ssao.minZAspect = 0.2;
-    // @ts-ignore
-    ssao.samples = 16;
-  } catch {}
+  // Post — pipeline (bloom, tonemap, grain, chromatic) — set up in main.ts after camera creation
+  // Curves for filmic — set up in main.ts
+  // SSAO — set up in main.ts
 
   // Skybox
   try {
@@ -659,5 +600,5 @@ export function createScene(engine: Engine, canvas: HTMLCanvasElement) {
     { id:"bike", root:bikeRoot, mesh:bikeFrame as unknown as Mesh, pos:bikeRoot.position.clone(), rot:bikeRoot.rotation.y, speed:0 },
   ];
 
-  return { scene, camera, charRoot, charBody, interactables, door, hl, engine, vehicles, ground, pipeline, shadowGen };
+  return { scene, charRoot, interactables, door, hl, vehicles, ground, shadowGen };
 }
